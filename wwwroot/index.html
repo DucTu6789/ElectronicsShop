@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>TechShop – Cửa hàng điện tử</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header class="top">
+    <h1>TechShop</h1>
+    <input id="search" type="search" placeholder="Tìm theo tên hoặc hãng...">
+    <button id="btnAdd" class="btn primary">Thêm sản phẩm</button>
+  </header>
+
+  <main>
+    <p id="status" class="status"></p>
+    <div id="grid" class="grid"></div>
+  </main>
+
+  <dialog id="dlg">
+    <form id="form">
+      <h2 id="dlgTitle">Thêm sản phẩm</h2>
+      <input type="hidden" id="id">
+      <label>Tên sản phẩm <input id="name" required maxlength="200"></label>
+      <label>Hãng <input id="brand" required maxlength="100"></label>
+      <div class="row">
+        <label>Giá (₫) <input id="price" type="number" min="0" step="1000" required></label>
+        <label>Tồn kho <input id="stock" type="number" min="0" required></label>
+      </div>
+      <label>Link ảnh <input id="imageUrl" type="url" maxlength="500" placeholder="https://..."></label>
+      <label>Mô tả <textarea id="description" rows="3" maxlength="1000"></textarea></label>
+      <div class="actions">
+        <button type="button" id="btnCancel" class="btn">Hủy</button>
+        <button type="submit" class="btn primary">Lưu</button>
+      </div>
+    </form>
+  </dialog>
+
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/axios/1.7.7/axios.min.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
