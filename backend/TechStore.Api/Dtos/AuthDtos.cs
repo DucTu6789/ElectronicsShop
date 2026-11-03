@@ -2,29 +2,44 @@ using System.ComponentModel.DataAnnotations;
 
 namespace TechStore.Api.Dtos;
 
+// Quy tắc kiểm tra dùng chung (front-end có bản tương ứng ở src/utils/validators.js)
+public static class ValidationRules
+{
+    // name@domain.tld, không có khoảng trắng
+    public const string Email = @"^[^\s@]+@[^\s@]+\.[^\s@]+$";
+
+    // Ít nhất 1 chữ cái và 1 chữ số
+    public const string Password = @"^(?=.*[A-Za-z])(?=.*\d).+$";
+}
+
 public class LoginRequest
 {
-    [Required]
-    public string Username { get; set; } = string.Empty;
+    [Required(ErrorMessage = "Vui lòng nhập email")]
+    [RegularExpression(ValidationRules.Email, ErrorMessage = "Email không hợp lệ")]
+    public string Email { get; set; } = string.Empty;
 
-    [Required]
+    // Khi đăng nhập chỉ cần có mật khẩu, không kiểm tra độ mạnh
+    [Required(ErrorMessage = "Vui lòng nhập mật khẩu")]
     public string Password { get; set; } = string.Empty;
 }
 
 public class RegisterRequest
 {
-    [Required(ErrorMessage = "Vui lòng nhập tên đăng nhập")]
-    [StringLength(50, MinimumLength = 3, ErrorMessage = "Tên đăng nhập từ 3 đến 50 ký tự")]
-    [RegularExpression("^[a-zA-Z0-9_.]+$", ErrorMessage = "Tên đăng nhập chỉ gồm chữ, số, dấu _ và .")]
-    public string Username { get; set; } = string.Empty;
+    [Required(ErrorMessage = "Vui lòng nhập email")]
+    [StringLength(254, ErrorMessage = "Email tối đa 254 ký tự")]
+    [RegularExpression(ValidationRules.Email, ErrorMessage = "Email không hợp lệ")]
+    public string Email { get; set; } = string.Empty;
 
     [Required(ErrorMessage = "Vui lòng nhập mật khẩu")]
-    [StringLength(100, MinimumLength = 6, ErrorMessage = "Mật khẩu tối thiểu 6 ký tự")]
+    [StringLength(100, MinimumLength = 8, ErrorMessage = "Mật khẩu từ 8 đến 100 ký tự")]
+    [RegularExpression(ValidationRules.Password, ErrorMessage = "Mật khẩu phải có ít nhất 1 chữ cái và 1 chữ số")]
     public string Password { get; set; } = string.Empty;
 
-    [Required(ErrorMessage = "Vui lòng nhập họ tên")]
-    [StringLength(100)]
-    public string FullName { get; set; } = string.Empty;
+    // Không bắt buộc (phải khai báo string? để ASP.NET không tự coi là bắt buộc)
+    [StringLength(100, ErrorMessage = "Họ tên tối đa 100 ký tự")]
+    public string? FullName { get; set; }
 }
 
-public record LoginResponse(string Token, string Username, string FullName, string Role, DateTime ExpiresAt);
+public record UserDto(int Id, string Email, string FullName, string Role);
+
+public record AuthResponse(string Token, DateTime ExpiresAt, UserDto User);

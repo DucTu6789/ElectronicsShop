@@ -11,7 +11,7 @@ const menu = [
 
 export default function Header() {
   const [open, setOpen] = useState(false)
-  const { isAuthenticated, isAdmin, fullName, username, logout } = useAuth()
+  const { isAuthenticated, isAdmin, user, logout } = useAuth()
   const navigate = useNavigate()
 
   // Menu "Quản trị" chỉ hiện với tài khoản Admin
@@ -55,7 +55,9 @@ export default function Header() {
         <div className="header-actions">
           {isAuthenticated ? (
             <>
-              <span className="hello" title={username}>Xin chào, {fullName || username}</span>
+              <Link to="/profile" className="hello" title={user.email} onClick={() => setOpen(false)}>
+                Xin chào, {user.fullName || user.email}
+              </Link>
               <button className="logout-btn" type="button" onClick={onLogout}>Đăng xuất</button>
             </>
           ) : (

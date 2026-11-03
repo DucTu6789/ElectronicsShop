@@ -275,3 +275,16 @@ img { max-width: 100%; }
 .auth-link-primary { background: var(--primary); color: #fff; }
 .auth-link-primary:hover { background: var(--primary-dark); color: #fff; }
 @media (max-width: 768px) { .hello { display: none; } }
+
+/* ---- Form: lỗi theo từng ô, trang tài khoản ---- */
+.field { display: flex; flex-direction: column; gap: 6px; }
+.field-error { color: #b91c1c; font-size: 13px; font-weight: 500; }
+.field-hint { color: var(--muted); font-size: 13px; font-weight: 400; }
+.contact-form .field-invalid input { border-color: var(--danger); }
+.contact-form .field-invalid input:focus { box-shadow: 0 0 0 3px #fee2e2; }
+.profile-card { max-width: 520px; margin: 20px auto; }
+.profile-list { display: grid; grid-template-columns: 1fr; gap: 4px 0; margin: 12px 0 0; }
+.profile-list dt { font-size: 13px; color: var(--muted); font-weight: 600; margin-top: 10px; }
+.profile-list dd { margin: 0; font-weight: 600; word-break: break-all; }
+.profile-list .muted { color: var(--muted); font-weight: 400; }
+a.hello:hover { color: var(--primary); }

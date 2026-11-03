@@ -87,22 +87,23 @@ if (app.Environment.IsDevelopment())
     else
         db.Database.EnsureCreated();
 
-    // Database cũ (tạo trước khi có bảng Users) -> tạo lại từ đầu để có đủ bảng
-    try { _ = db.Users.Any(); }
+    // Database cũ (thiếu bảng Users, hoặc bảng Users còn cột Username thay vì Email)
+    // -> tạo lại từ đầu cho khớp model hiện tại
+    try { _ = db.Users.Select(u => u.Email).FirstOrDefault(); }
     catch (SqliteException)
     {
-        Console.WriteLine("Database cũ thiếu bảng Users -> tạo lại database mẫu...");
+        Console.WriteLine("Database cũ không khớp bảng Users (đăng nhập bằng email) -> tạo lại database mẫu...");
         db.Database.EnsureDeleted();
         db.Database.EnsureCreated();
     }
 
     // Tạo tài khoản admin ban đầu (lấy từ appsettings.json -> AdminAccount) nếu chưa có
-    var adminName = (builder.Configuration["AdminAccount:Username"] ?? "admin").Trim().ToLowerInvariant();
-    if (!db.Users.Any(u => u.Username == adminName))
+    var adminEmail = (builder.Configuration["AdminAccount:Email"] ?? "admin@techstore.vn").Trim().ToLowerInvariant();
+    if (!db.Users.Any(u => u.Email == adminEmail))
     {
         db.Users.Add(new User
         {
-            Username = adminName,
+            Email = adminEmail,
             PasswordHash = PasswordHasher.Hash(builder.Configuration["AdminAccount:Password"] ?? "Admin@123"),
             FullName = "Quản trị viên",
             Role = "Admin",

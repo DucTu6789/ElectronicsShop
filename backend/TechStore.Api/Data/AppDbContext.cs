@@ -34,8 +34,9 @@ public class AppDbContext : DbContext
 
         modelBuilder.Entity<User>(e =>
         {
-            e.HasIndex(u => u.Username).IsUnique();
-            e.Property(u => u.Username).HasMaxLength(50).IsRequired();
+            e.HasIndex(u => u.Email).IsUnique();   // không cho 2 tài khoản trùng email
+            e.Property(u => u.Email).HasMaxLength(254).IsRequired();
+            e.Property(u => u.PasswordHash).IsRequired();
             e.Property(u => u.FullName).HasMaxLength(100);
             e.Property(u => u.Role).HasMaxLength(20).IsRequired();
         });

@@ -8,6 +8,7 @@ import Contact from './pages/Contact.jsx'
 import AdminProducts from './pages/AdminProducts.jsx'
 import Login from './pages/Login.jsx'
 import Register from './pages/Register.jsx'
+import Profile from './pages/Profile.jsx'
 import ProtectedRoute from './components/ProtectedRoute.jsx'
 import NotFound from './pages/NotFound.jsx'
 
@@ -18,6 +19,7 @@ import NotFound from './pages/NotFound.jsx'
 //   /about-us          -> Giới thiệu
 //   /contact           -> Liên hệ
 //   /login, /register  -> Đăng nhập / Đăng ký
+//   /profile           -> Thông tin tài khoản (cần đăng nhập)
 //   /admin/products    -> Quản lý sản phẩm (chỉ tài khoản Admin)
 //   *                  -> 404
 export default function App() {
@@ -31,6 +33,9 @@ export default function App() {
         <Route path="contact" element={<Contact />} />
         <Route path="login" element={<Login />} />
         <Route path="register" element={<Register />} />
+        <Route element={<ProtectedRoute />}>
+          <Route path="profile" element={<Profile />} />
+        </Route>
         <Route element={<ProtectedRoute adminOnly />}>
           <Route path="admin/products" element={<AdminProducts />} />
         </Route>

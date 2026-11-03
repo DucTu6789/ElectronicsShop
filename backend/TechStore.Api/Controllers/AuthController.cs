@@ -16,6 +16,10 @@ namespace TechStore.Api.Controllers;
 [Route("api/[controller]")]
 public class AuthController : ControllerBase
 {
+    // Dùng để băm thử khi email không tồn tại, để thời gian phản hồi giống nhau
+    // (tránh để kẻ xấu dò xem email nào đã đăng ký)
+    private static readonly string DummyHash = PasswordHasher.Hash("dummy-password-1");
+
     private readonly AppDbContext _db;
     private readonly IConfiguration _config;
 
@@ -25,57 +29,84 @@ public class AuthController : ControllerBase
         _config = config;
     }
 
-    // POST api/auth/register -> tạo tài khoản khách hàng (role User) và đăng nhập luôn
+    // POST api/auth/register
+    // Dữ liệu đã được [ApiController] kiểm tra theo RegisterRequest (sai -> tự trả 400)
+    // -> kiểm tra trùng email -> băm mật khẩu -> INSERT vào bảng Users -> đăng nhập luôn
     [HttpPost("register")]
-    public async Task<ActionResult<LoginResponse>> Register(RegisterRequest request)
+    public async Task<ActionResult<AuthResponse>> Register(RegisterRequest request)
     {
-        var username = request.Username.Trim().ToLowerInvariant();
+        var email = NormalizeEmail(request.Email);
 
-        if (await _db.Users.AnyAsync(u => u.Username == username))
-            return Conflict(new { message = "Tên đăng nhập đã tồn tại" });
+        if (await _db.Users.AnyAsync(u => u.Email == email))
+            return Conflict(new { message = "Email này đã được đăng ký" });
 
         var user = new User
         {
-            Username = username,
+            Email = email,
             PasswordHash = PasswordHasher.Hash(request.Password),
-            FullName = request.FullName.Trim(),
+            FullName = request.FullName?.Trim() ?? string.Empty,
             Role = "User",
         };
         _db.Users.Add(user);
-        await _db.SaveChangesAsync();
 
-        return Ok(CreateToken(user));
+        try
+        {
+            await _db.SaveChangesAsync();
+        }
+        catch (DbUpdateException)
+        {
+            // Hai request đăng ký cùng email gửi gần như đồng thời: unique index sẽ chặn request thứ hai
+            return Conflict(new { message = "Email này đã được đăng ký" });
+        }
+
+        return Ok(CreateAuthResponse(user));
     }
 
-    // POST api/auth/login -> trả về JWT nếu đúng tài khoản
+    // POST api/auth/login
+    // SELECT user theo email trong DB -> so khớp mật khẩu với bản băm -> trả JWT + thông tin user
     [HttpPost("login")]
-    public async Task<ActionResult<LoginResponse>> Login(LoginRequest request)
+    public async Task<ActionResult<AuthResponse>> Login(LoginRequest request)
     {
-        var username = request.Username.Trim().ToLowerInvariant();
-        var user = await _db.Users.FirstOrDefaultAsync(u => u.Username == username);
+        var email = NormalizeEmail(request.Email);
+        var user = await _db.Users.FirstOrDefaultAsync(u => u.Email == email);
 
-        if (user is null || !PasswordHasher.Verify(request.Password, user.PasswordHash))
-            return Unauthorized(new { message = "Sai tên đăng nhập hoặc mật khẩu" });
+        // Luôn băm/so khớp một lần dù email có tồn tại hay không
+        var passwordOk = PasswordHasher.Verify(request.Password, user?.PasswordHash ?? DummyHash);
 
-        return Ok(CreateToken(user));
+        if (user is null || !passwordOk)
+            return Unauthorized(new { message = "Sai email hoặc mật khẩu" });
+
+        return Ok(CreateAuthResponse(user));
     }
 
-    // GET api/auth/me -> thông tin người đang đăng nhập
+    // GET api/auth/me -> đọc lại thông tin người đang đăng nhập từ DB
+    // (front-end gọi khi mở lại trang để chắc chắn token còn hiệu lực và user còn tồn tại)
     [Authorize]
     [HttpGet("me")]
-    public IActionResult Me() => Ok(new
+    public async Task<ActionResult<UserDto>> Me()
     {
-        username = User.Identity?.Name,
-        role = User.FindFirstValue(ClaimTypes.Role),
-    });
+        if (!int.TryParse(User.FindFirstValue(ClaimTypes.NameIdentifier), out var id))
+            return Unauthorized();
 
-    private LoginResponse CreateToken(User user)
+        var user = await _db.Users.AsNoTracking().FirstOrDefaultAsync(u => u.Id == id);
+        if (user is null)
+            return Unauthorized(new { message = "Tài khoản không còn tồn tại" });
+
+        return Ok(ToDto(user));
+    }
+
+    private static string NormalizeEmail(string email) => email.Trim().ToLowerInvariant();
+
+    private static UserDto ToDto(User user) => new(user.Id, user.Email, user.FullName, user.Role);
+
+    private AuthResponse CreateAuthResponse(User user)
     {
         var expires = DateTime.UtcNow.AddMinutes(_config.GetValue("Jwt:ExpireMinutes", 120));
         var claims = new[]
         {
             new Claim(ClaimTypes.NameIdentifier, user.Id.ToString()),
-            new Claim(ClaimTypes.Name, user.Username),
+            new Claim(ClaimTypes.Name, user.Email),
+            new Claim(ClaimTypes.Email, user.Email),
             new Claim(ClaimTypes.Role, user.Role),
         };
 
@@ -87,6 +118,6 @@ public class AuthController : ControllerBase
             expires: expires,
             signingCredentials: new SigningCredentials(key, SecurityAlgorithms.HmacSha256));
 
-        return new LoginResponse(new JwtSecurityTokenHandler().WriteToken(token), user.Username, user.FullName, user.Role, expires);
+        return new AuthResponse(new JwtSecurityTokenHandler().WriteToken(token), expires, ToDto(user));
     }
 }

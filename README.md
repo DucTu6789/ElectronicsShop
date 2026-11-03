@@ -43,6 +43,7 @@ Lần chạy đầu tiên, backend tự tạo file `techstore.db` với 6 danh m
 | `/about-us` | Giới thiệu |
 | `/contact` | Liên hệ |
 | `/login`, `/register` | Đăng nhập, Đăng ký |
+| `/profile` | Thông tin tài khoản – **cần đăng nhập** |
 | `/admin/products` | Quản lý sản phẩm (thêm / sửa / xóa) – **chỉ tài khoản Admin** |
 | `*` | Trang 404 |
 
@@ -55,8 +56,9 @@ Thư mục `backend/TechStore.Api`.
 
 | Method | URL | Chức năng |
 | --- | --- | --- |
-| POST | `/api/auth/register` | Đăng ký tài khoản, nhận JWT |
-| POST | `/api/auth/login` | Đăng nhập, nhận JWT |
+| POST | `/api/auth/register` | Đăng ký bằng email + mật khẩu, nhận JWT |
+| POST | `/api/auth/login` | Đăng nhập bằng email + mật khẩu, nhận JWT |
+| GET 🔒 | `/api/auth/me` | Thông tin người đang đăng nhập (đọc từ DB) |
 | GET | `/api/products?categoryId=&search=` | Danh sách sản phẩm |
 | GET | `/api/products/{id}` | Chi tiết sản phẩm |
 | POST 🔒 | `/api/products` | Thêm sản phẩm |
@@ -64,7 +66,7 @@ Thư mục `backend/TechStore.Api`.
 | DELETE 🔒 | `/api/products/{id}` | Xóa sản phẩm |
 | GET / POST 🔒 / PUT 🔒 / DELETE 🔒 | `/api/categories`, `/api/categories/{id}` | Quản lý danh mục |
 
-🔒 = cần vai trò Admin (header `Authorization: Bearer <token>`).
+🔒 = cần đăng nhập (header `Authorization: Bearer <token>`); riêng `products` / `categories` thì cần vai trò Admin.
 
 Body mẫu cho POST / PUT `/api/products`:
 
@@ -84,27 +86,46 @@ Body mẫu cho POST / PUT `/api/products`:
 
 Các file chính:
 
-- `Controllers/` – `ProductsController`, `CategoriesController`
-- `Models/` – `Product`, `Category`
+- `Controllers/` – `AuthController`, `ProductsController`, `CategoriesController`
+- `Models/` – `Product`, `Category`, `User`
 - `Dtos/` – dữ liệu request / response và kiểm tra hợp lệ
 - `Data/AppDbContext.cs` – DbContext của EF Core; `Data/SeedData.cs` – dữ liệu mẫu
 - `Program.cs` – đăng ký DbContext, CORS cho `localhost:3000`, Swagger
 
 ## Tài khoản, đăng ký, đăng nhập (JWT)
 
-- Bảng `Users` trong database lưu tài khoản (mật khẩu được băm PBKDF2, không lưu mật khẩu thật). Có 2 vai trò: `Admin` và `User`.
-- **Đăng ký:** `http://localhost:3000/register` tạo tài khoản khách hàng (vai trò `User`) và tự đăng nhập.
-- **Đăng nhập:** `http://localhost:3000/login`.
-- **Tài khoản Admin mặc định:** `admin` / `Admin@123` (đổi trong `appsettings.json`, mục `AdminAccount`; được tạo tự động khi backend khởi động nếu chưa có).
-- Menu "Quản trị" chỉ hiện với Admin. `User` thường vào `/admin/products` sẽ bị đưa về trang chủ, chưa đăng nhập thì bị chuyển sang `/login`.
-- Backend: `POST /api/auth/register`, `POST /api/auth/login` trả về JWT; POST / PUT / DELETE của `products` và `categories` yêu cầu vai trò `Admin`, còn GET công khai.
-- Front-end: `src/context/AuthContext.jsx` lưu token và vai trò, `src/components/ProtectedRoute.jsx` chặn route, `axiosClient` tự gắn header `Authorization: Bearer <token>`.
-- Thử trong Swagger: gọi `/api/auth/login`, copy `token`, bấm nút **Authorize** rồi dán token.
-- Nếu database cũ chưa có bảng `Users`, backend sẽ tự tạo lại database mẫu khi khởi động (chỉ ở môi trường Development, không dùng migration).
+Đăng ký / đăng nhập bằng **email + mật khẩu**. Luồng hoạt động:
+
+1. **Nhập thông tin** – form `/register` (email, mật khẩu, nhập lại mật khẩu, họ tên không bắt buộc) và `/login` (email, mật khẩu).
+2. **Validate** – 2 lớp, cùng quy tắc:
+   - Front-end (`src/utils/validators.js`, hook `src/hooks/useForm.js`): báo lỗi ngay dưới từng ô khi rời khỏi ô hoặc bấm gửi; có lỗi thì **không gọi API**.
+   - Back-end (`Dtos/AuthDtos.cs`, DataAnnotations): server luôn kiểm tra lại, sai thì trả `400` kèm lỗi theo từng ô.
+   - Quy tắc: email đúng định dạng (tối đa 254 ký tự); mật khẩu 8–100 ký tự, có ít nhất 1 chữ cái và 1 chữ số; họ tên tối đa 100 ký tự. (Đăng nhập chỉ yêu cầu có nhập mật khẩu.)
+3. **Lưu user vào DB** – `POST /api/auth/register` kiểm tra email chưa tồn tại (trùng → `409`), băm mật khẩu PBKDF2 (không lưu mật khẩu thật), `INSERT` vào bảng `Users` (cột `Email` có unique index), rồi đăng nhập luôn.
+4. **Query DB khi đăng nhập** – `POST /api/auth/login` `SELECT` user theo email (email được chuẩn hoá: bỏ khoảng trắng, chữ thường), so khớp mật khẩu với bản băm; đúng thì trả JWT + thông tin user, sai thì `401` "Sai email hoặc mật khẩu" (không tiết lộ email có tồn tại hay không).
+5. **Context + localStorage** (`src/context/AuthContext.jsx`, `src/utils/authStorage.js`):
+   - Sau khi đăng nhập / đăng ký thành công, `{ token, expiresAt, user }` được lưu vào **state của AuthContext** và vào **localStorage** (key `techstore.auth`).
+   - Mọi component lấy dữ liệu bằng `const { user, isAuthenticated, isAdmin, login, register, logout } = useAuth()`.
+   - Tải lại trang (F5) vẫn còn đăng nhập; token hết hạn thì bỏ qua và tự đăng xuất đúng giờ.
+   - Khi mở lại trang, front-end gọi `GET /api/auth/me` để server kiểm tra token và làm mới thông tin user từ DB; `401` (token sai / user bị xóa) → tự đăng xuất.
+   - Đăng xuất / đăng nhập ở một tab thì các tab khác tự cập nhật (sự kiện `storage`).
+   - `axiosClient` tự gắn `Authorization: Bearer <token>` vào mọi request.
+   - `ProtectedRoute` chặn route: chưa đăng nhập → `/login` (đăng nhập xong quay lại trang đang muốn vào); không phải Admin → về trang chủ.
+
+**Tài khoản Admin mặc định:** `admin@techstore.vn` / `Admin@123` (đổi trong `appsettings.json`, mục `AdminAccount`; được tạo tự động khi backend khởi động nếu chưa có). Đăng ký ở `/register` luôn tạo tài khoản vai trò `User`.
+
+**Thử nhanh:** chạy `npm run dev:all`, vào `http://localhost:3000/register` đăng ký một email → header hiện "Xin chào, <email>" → F5 vẫn còn đăng nhập → bấm tên để xem `/profile` → "Đăng xuất". Có thể xem bản ghi trong bảng `Users` của file `techstore.db` bằng DB Browser for SQLite.
+
+**Thử bằng Swagger:** gọi `/api/auth/login`, copy `token`, bấm nút **Authorize** rồi dán token.
+
+> **Lưu ý khi cập nhật từ bản cũ (đăng nhập bằng tên đăng nhập):** bảng `Users` đổi cột `Username` → `Email`. Khi chạy, backend tự phát hiện database cũ và tạo lại database mẫu (chỉ ở môi trường Development, **dữ liệu cũ sẽ mất**). Nếu bạn đã chạy `dotnet ef migrations`, hãy xóa `techstore.db` và thư mục `Migrations/` rồi tạo lại migration `InitialCreate`.
+>
+> Token JWT được lưu ở `localStorage` theo yêu cầu bài tập; cách này đơn giản nhưng dễ bị đánh cắp nếu trang bị lỗi XSS. Ứng dụng thật thường dùng cookie `HttpOnly`.
 
 ## Front-end gọi API bằng Axios
 
 - `src/api/axiosClient.js` – instance Axios (baseURL lấy từ `.env`, biến `VITE_API_URL`, mặc định `http://localhost:5000/api`)
+- `src/api/authApi.js` – gọi `login`, `register`, `me`
 - `src/api/productApi.js`, `src/api/categoryApi.js` – các hàm GET / POST / PUT / DELETE
 - `src/hooks/useFetch.js` – hook gọi API (loading, error, reload)
 - `src/pages/AdminProducts.jsx` – form thêm (POST), sửa (PUT), xóa (DELETE) sản phẩm
@@ -152,12 +173,13 @@ techstore/
     ├── main.jsx                  # điểm vào, bọc BrowserRouter
     ├── App.jsx                   # khai báo routes
     ├── index.css                 # CSS toàn bộ giao diện
-    ├── api/                      # axiosClient, productApi, categoryApi
-    ├── hooks/useFetch.js
-    ├── utils/format.js
+    ├── api/                      # axiosClient, authApi, productApi, categoryApi
+    ├── context/AuthContext.jsx   # trạng thái đăng nhập (Context + localStorage)
+    ├── hooks/                    # useFetch, useForm
+    ├── utils/                    # format, validators, authStorage
     ├── layouts/MainLayout.jsx
-    ├── components/               # Header, Footer, ProductCard, Status
-    └── pages/                    # Home, Products, ProductDetail, AboutUs, Contact, AdminProducts, NotFound
+    ├── components/               # Header, Footer, ProductCard, Status, FormField, ProtectedRoute
+    └── pages/                    # Home, Products, ProductDetail, AboutUs, Contact, Login, Register, Profile, AdminProducts, NotFound
 ```
 
 ## Đưa code lên GitHub
